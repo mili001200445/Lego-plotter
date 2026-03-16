@@ -1,0 +1,246 @@
+<!-- BOOST Plotter Wizard – HTML + CSS (responsive, fixes applied) -->
+<div id="app">
+  <style>
+  html, body {
+  overscroll-behavior: none;  /* niente pull-to-refresh/bounce */
+}
+
+:root {
+  --green:#4CAF50;
+  --red:#ED0000;
+  --text:#222;
+  --border:#eee;
+  --bg:#fafafa;
+  --pad:16px;
+  --header-h:56px;
+  --canvas-gutter:8px;
+}
+
+/* Base */
+#app { font-family: Arial, sans-serif; color:var(--text); background:var(--bg); container-type:inline-size; }
+.header-bar {
+  padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
+  background:#fff; border-bottom:1px solid var(--border);
+}
+.title { font-size:18px; margin:0; }
+.status { font-size:12px; opacity:.8; }
+
+/* Grid wrapper: no overflow */
+.wrap {
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap:16px;
+  padding:16px;
+  max-width:100vw;
+  overflow-x:hidden;
+  box-sizing:border-box;
+}
+.panel { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px; min-width:0; }
+.row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:8px 0; min-width:0; }
+.label { font-size:12px; opacity:.8; min-width:90px; }
+.note { font-size:12px; opacity:.8; }
+
+/* Buttons */
+.btn {
+  user-select:none; display:inline-flex; align-items:center; gap:6px;
+  border:2px solid var(--green); background:var(--green); color:#fff;
+  font-weight:600; font-size:14px; padding:10px 14px; border-radius:6px;
+  cursor:pointer; transition:.15s;
+  justify-content: center;
+  text-align: center;
+}
+.btn:hover { background:#fff; color:var(--green); }
+.btn:disabled { opacity:.5; cursor:not-allowed; background:#ccc; border-color:#bbb; color:#666; }
+.btn.red { border-color:var(--red); background:var(--red); }
+.btn.red:hover { color:var(--red); background:#fff; }
+.btn.small { padding:8px 12px; font-size:14px; }
+
+/* Preview panel width cap (desktop) */
+.preview-panel { max-width: 560px; }
+
+.stage {
+ touch-action: none; 
+  position:relative;
+  background:#fff; border:1px solid #ddd; border-radius:0;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  /* CONSENTI lo scroll pagina anche se tocchi la canvas */
+  touch-action: pan-y pinch-zoom;
+
+  /* ratio fisso 96x128 */
+  aspect-ratio: 3 / 4;
+
+  /* desktop: compatta ma senza forzare l’altezza (niente distorsioni) */
+  width: min(42vw, 380px);
+  max-width: 100%;
+
+  /* RIMOSSO qualsiasi height/max-height che schiaccia l'AR */
+  padding: var(--canvas-gutter);
+  box-sizing: border-box;
+}
+
+#stage {
+  touch-action: none;         /* niente scroll/zoom di default */
+}
+
+#canvas {
+  touch-action: none; 
+  width: 100%;
+  height: auto;       /* mantiene il ratio dettato dallo stage */
+  max-width: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+
+/* Image controls: allineati a destra */
+.preview-panel .img-controls { justify-content:left; gap:12px; width:100%; }
+
+/* Sliders SEMPRE full width (una colonna) */
+.preview-panel .sliders { display:flex; flex-direction:column; gap:12px; width:100%; }
+.preview-panel .sliders .slider-col { display:flex; flex-direction:column; gap:6px; width:100%; }
+input[type=range] { width:100%; }
+
+/* Robot controls */
+.robot-controls { gap:10px; flex-wrap:wrap; }
+
+/* Log */
+#log {
+  width:100%; height:100px; white-space:pre; overflow:auto; background:#111; color:#0f0;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding:8px; border-radius:6px;
+}
+
+/* Connect clone visibility (desktop hidden) */
+.connect-mobile { display:none; }
+
+/* ========= Responsive via CONTAINER QUERY ========= */
+@container (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; }
+  .header-actions { display:none; }
+  .connect-mobile { display:block; }
+  .connect-mobile .btn { width:100%; justify-content:center; text-align:center; }
+
+  .preview-panel { max-width:none; }
+
+  .stage {
+    width: 30vw;     /* metà schermo */
+    max-width: none;
+    height: auto;    /* NON fissare height: il ratio fa il resto */
+    margin: 0 auto;  /* centrata */
+  }
+}
+
+@media (max-width: 900px) {
+  .stage {
+    width: 30vw;
+    max-width: none;
+    height: auto;
+    margin: 0 auto;
+  }
+}
+
+
+  </style>
+
+  <header class="header-bar">
+    <div>
+      <h1 class="title">Prof. Bricks' BOOST Plotter App</h1>
+      <div id="statusLabel" class="status">Disconnected</div>
+    </div>
+    <div class="row header-actions">
+      <button id="connectButton" class="btn">Connect</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+      <!-- Mobile full-width connect (clone, click delegato via JS alla versione header) -->
+      <div class="row connect-mobile">
+        <button id="connectButton_clone" class="btn">Connect</button>
+      </div>
+  
+    <!-- Left: Preview -->
+    <section class="panel preview-panel">
+      <!-- Controls ABOVE canvas (aligned right) -->
+      <div class="row img-controls">
+        <button id="zoomIn"  class="btn small">+</button>
+        <button id="fit"     class="btn small">=</button>
+        <button id="zoomOut" class="btn small">-</button>
+        <input id="file-input" type="file" accept="image/*" style="display:none"/>
+        <button id="loadImg" class="btn small">Load image</button>
+		<button id="savePreview" class="btn small">Show Preview</button>
+        <!-- opzionale export -->
+        <!-- <button id="exportPngBtn" class="btn small">Save Preview</button> -->
+      </div>
+
+
+      <!-- Canvas -->
+      <div id="stage" class="stage">
+        <canvas id="canvas" width="96" height="128"></canvas>
+      </div>
+
+      <!-- Sliders BELOW canvas (full width) -->
+      <div class="row sliders">
+        <div class="slider-col">
+          <span class="label">Threshold</span>
+          <input id="threshold" type="range" min="0" max="255" value="60"/>
+        </div>
+		<!--
+		<div class="slider-col">
+		  <span class="label">Exposure</span>
+		  <input id="exposure" type="range" min="-0.5" max="0.5" value="0" step="0.01"/>
+		</div>
+		<div class="slider-col">
+		  <span class="label">Gamma</span>
+		  <input id="gamma" type="range" min="0.1" max="1.9" value="1" step="0.01"/>
+		</div>
+		-->
+        <div class="slider-col">
+          <span class="label">Pen size</span>
+          <input id="penSize" type="range" min="1" max="4" value="1"/>
+        </div>
+        <div class="slider-col">
+          <span class="label">Min segment length</span>
+          <input id="minSeg" type="range" min="1" max="10" value="2"/>
+        </div>
+      </div>
+
+      <div class="note">Pinch for zoom, drag for pan.</div>
+    </section>
+
+    <!-- Right: Robot controls -->
+    <section class="panel">
+      <div class="row robot-controls">
+        <button id="loadPaperBtn" class="btn" disabled>Load paper</button>
+        <button id="drawBtn" class="btn" disabled>Draw</button>
+        <button id="stopBtn" class="btn red" disabled>Stop</button>
+        <button id="clearLogButton" class="btn small">Clear log</button>
+      </div>
+	<!--
+      <div class="row">
+        <span class="label">Width x Height</span>
+        <span>96 x 128 px</span>
+      </div>
+      <div class="row">
+        <span class="label">Row skip</span>
+        <span id="rowSkipNote" >Based on pen size</span>
+      </div>
+      <div class="row">
+        <span class="label">Min length</span>
+        <span id="minSegNote">1</span>
+      </div>		  
+-->
+      <pre id="log"></pre>
+	  <div class="row">
+		<img src="boost_plotter400.png" alt="BOOST Plotter" 
+			 style="max-width:100%; max-height:100%; object-fit:contain; display:block; margin:auto;">
+	  </div>	  
+    </section>
+  </main>
+
+  <!-- Hidden container preserved for compatibility with your JS -->
+  <div id="indata" style="display:none;"></div>
+</div>
+
+<!-- Load your JS file at the end so DOM is ready -->
+<script src="scanline_plotter_mini.js"></script>
